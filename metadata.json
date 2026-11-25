@@ -1,0 +1,6 @@
+{
+  "name": "Formulaire d'Inscription au Pyjama Party",
+  "description": "Plateforme officielle d'inscription en ligne, génération de QR Code individuel, suivi en direct des participants et gestion administrative du Pyjama Party.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

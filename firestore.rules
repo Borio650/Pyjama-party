@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidEventSettings(data) {
+      return data.keys().hasAll([
+          'titre', 'description', 'affiche_present', 'affiche_fit',
+          'affiche_position', 'theme_primary', 'theme_accent',
+          'affichage_public_participants', 'updated_at'
+        ]) &&
+        data.keys().hasOnly([
+          'titre', 'description', 'affiche_present', 'affiche_fit',
+          'affiche_position', 'theme_primary', 'theme_accent',
+          'affichage_public_participants', 'updated_at'
+        ]) &&
+        data.titre is string && data.titre.size() >= 2 && data.titre.size() <= 140 &&
+        data.description is string && data.description.size() <= 600 &&
+        data.affiche_present is bool &&
+        data.affiche_fit is string && data.affiche_fit in ['contain', 'cover'] &&
+        data.affiche_position is string && data.affiche_position in ['center', 'top', 'bottom'] &&
+        data.theme_primary is string && data.theme_primary.size() == 7 && data.theme_primary.matches('^#[0-9a-fA-F]{6}$') &&
+        data.theme_accent is string && data.theme_accent.size() == 7 && data.theme_accent.matches('^#[0-9a-fA-F]{6}$') &&
+        data.affichage_public_participants is bool &&
+        data.updated_at is timestamp;
+    }
+
+    function isValidEventPoster(data) {
+      return data.keys().hasAll(['data_url', 'mime_type', 'file_name', 'width', 'height', 'updated_at']) &&
+        data.keys().hasOnly(['data_url', 'mime_type', 'file_name', 'width', 'height', 'updated_at']) &&
+        data.data_url is string && data.data_url.size() >= 20 && data.data_url.size() <= 750000 &&
+        data.data_url.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$') &&
+        data.mime_type is string && data.mime_type in ['image/jpeg', 'image/png', 'image/webp'] &&
+        data.file_name is string && data.file_name.size() >= 1 && data.file_name.size() <= 160 &&
+        data.width is int && data.width > 0 && data.width <= 6000 &&
+        data.height is int && data.height > 0 && data.height <= 6000 &&
+        data.updated_at is timestamp;
+    }
+
+    function isValidParticipantPublic(data) {
+      return data.keys().hasAll([
+          'numero_inscription', 'nom', 'prenom', 'branche_id', 'branche_nom',
+          'service_id', 'service_nom', 'qr_token', 'public_visible',
+          'statut_entree', 'date_entree', 'created_at'
+        ]) &&
+        data.keys().hasOnly([
+          'numero_inscription', 'nom', 'prenom', 'branche_id', 'branche_nom',
+          'service_id', 'service_nom', 'qr_token', 'public_visible',
+          'statut_entree', 'date_entree', 'created_at'
+        ]) &&
+        data.numero_inscription is string && data.numero_inscription.size() >= 4 && data.numero_inscription.size() <= 24 &&
+        data.numero_inscription.matches('^PYJ-[0-9A-Z-]+$') &&
+        data.nom is string && data.nom.size() >= 1 && data.nom.size() <= 80 &&
+        data.prenom is string && data.prenom.size() >= 1 && data.prenom.size() <= 80 &&
+        isValidId(data.branche_id) && data.branche_id.size() <= 64 &&
+        data.branche_nom is string && data.branche_nom.size() >= 1 && data.branche_nom.size() <= 80 &&
+        isValidId(data.service_id) && data.service_id.size() <= 64 &&
+        data.service_nom is string && data.service_nom.size() >= 1 && data.service_nom.size() <= 80 &&
+        data.qr_token is string && data.qr_token.size() >= 24 && data.qr_token.size() <= 80 &&
+        data.qr_token.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.public_visible is bool &&
+        data.statut_entree is bool &&
+        (data.date_entree == null || data.date_entree is timestamp) &&
+        data.created_at is timestamp;
+    }
+
+    function isValidParticipantPrivate(data, participantId) {
+      return data.keys().hasAll(['participant_id', 'contact', 'phone_hash', 'created_at']) &&
+        data.keys().hasOnly(['participant_id', 'contact', 'phone_hash', 'created_at']) &&
+        data.participant_id == participantId &&
+        isValidId(data.participant_id) && data.participant_id.size() <= 64 &&
+        data.contact is string && data.contact.size() >= 8 && data.contact.size() <= 24 &&
+        data.contact.matches('^\\+[0-9]{8,18}$') &&
+        data.phone_hash is string && data.phone_hash.size() == 64 &&
+        data.phone_hash.matches('^[a-f0-9]{64}$') &&
+        data.created_at is timestamp;
+    }
+
+    function isValidRegistrationLock(data, phoneHash) {
+      return data.keys().hasAll(['participant_id', 'created_at']) &&
+        data.keys().hasOnly(['participant_id', 'created_at']) &&
+        phoneHash is string && phoneHash.size() == 64 && phoneHash.matches('^[a-f0-9]{64}$') &&
+        isValidId(data.participant_id) && data.participant_id.size() <= 64 &&
+        data.created_at is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    match /branches/{branchId} {
+      allow get: if isValidId(branchId);
+      allow list: if existing().active == true;
+      allow write: if false;
+    }
+
+    match /services/{serviceId} {
+      allow get: if isValidId(serviceId);
+      allow list: if existing().active == true;
+      allow write: if false;
+    }
+
+    match /event_settings/{settingId} {
+      allow get: if isValidId(settingId) && settingId == 'main';
+      allow list: if false;
+      allow create: if settingId == 'main' && isValidEventSettings(incoming()) && incoming().updated_at == request.time;
+      allow update: if settingId == 'main' && isValidEventSettings(incoming()) &&
+        incoming().updated_at == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'titre', 'description', 'affiche_present', 'affiche_fit',
+          'affiche_position', 'theme_primary', 'theme_accent',
+          'affichage_public_participants', 'updated_at'
+        ]);
+      allow delete: if false;
+    }
+
+    match /event_posters/{posterId} {
+      allow get: if isValidId(posterId) && posterId == 'official';
+      allow list: if false;
+      allow create: if posterId == 'official' && isValidEventPoster(incoming()) && incoming().updated_at == request.time;
+      allow update: if posterId == 'official' && isValidEventPoster(incoming()) &&
+        incoming().updated_at == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'data_url', 'mime_type', 'file_name', 'width', 'height', 'updated_at'
+        ]);
+      allow delete: if posterId == 'official';
+    }
+
+    match /participants_public/{participantId} {
+      allow get: if isValidId(participantId) && existing().public_visible == true;
+      allow list: if existing().public_visible == true;
+
+      allow create: if isValidId(participantId) && participantId.size() <= 64 &&
+        isValidParticipantPublic(incoming()) &&
+        incoming().statut_entree == false &&
+        incoming().date_entree == null &&
+        incoming().created_at == request.time &&
+        incoming().public_visible == true &&
+        existsAfter(/databases/$(database)/documents/participants_private/$(participantId));
+
+      allow update, delete: if false;
+    }
+
+    match /participants_private/{participantId} {
+      // PII strictly never readable publicly
+      allow read: if false;
+
+      allow create: if isValidId(participantId) && participantId.size() <= 64 &&
+        isValidParticipantPrivate(incoming(), participantId) &&
+        incoming().created_at == request.time &&
+        existsAfter(/databases/$(database)/documents/participants_public/$(participantId)) &&
+        existsAfter(/databases/$(database)/documents/registration_locks/$(incoming().phone_hash));
+
+      allow update, delete: if false;
+    }
+
+    match /registration_locks/{phoneHash} {
+      allow read: if false;
+      allow create: if isValidRegistrationLock(incoming(), phoneHash) &&
+        incoming().created_at == request.time &&
+        existsAfter(/databases/$(database)/documents/participants_public/$(incoming().participant_id)) &&
+        existsAfter(/databases/$(database)/documents/participants_private/$(incoming().participant_id));
+      allow update, delete: if false;
+    }
+  }
+}

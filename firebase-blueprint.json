@@ -1,0 +1,154 @@
+{
+  "entities": {
+    "Branch": {
+      "title": "Branch",
+      "description": "Organization branch selectable during registration",
+      "type": "object",
+      "properties": {
+        "nom_branche": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "ordre": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nom_branche", "ordre", "active", "created_at"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Department service selectable during registration",
+      "type": "object",
+      "properties": {
+        "nom_service": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "ordre": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nom_service", "ordre", "active", "created_at"]
+    },
+    "EventSettings": {
+      "title": "EventSettings",
+      "description": "Public configuration and poster theme customization",
+      "type": "object",
+      "properties": {
+        "titre": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "description": { "type": "string", "minLength": 0, "maxLength": 600 },
+        "affiche_present": { "type": "boolean" },
+        "affiche_fit": { "type": "string", "enum": ["contain", "cover"] },
+        "affiche_position": { "type": "string", "enum": ["center", "top", "bottom"] },
+        "theme_primary": { "type": "string", "maxLength": 20, "pattern": "^#[0-9a-fA-F]{6}$" },
+        "theme_accent": { "type": "string", "maxLength": 20, "pattern": "^#[0-9a-fA-F]{6}$" },
+        "affichage_public_participants": { "type": "boolean" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "titre",
+        "description",
+        "affiche_present",
+        "affiche_fit",
+        "affiche_position",
+        "theme_primary",
+        "theme_accent",
+        "affichage_public_participants",
+        "updated_at"
+      ]
+    },
+    "EventPoster": {
+      "title": "EventPoster",
+      "description": "Official Pyjama Party poster asset",
+      "type": "object",
+      "properties": {
+        "data_url": { "type": "string", "minLength": 20, "maxLength": 750000 },
+        "mime_type": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] },
+        "file_name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["data_url", "mime_type", "file_name", "width", "height", "updated_at"]
+    },
+    "ParticipantPublic": {
+      "title": "ParticipantPublic",
+      "description": "Non-PII public participant record and QR ticket info",
+      "type": "object",
+      "properties": {
+        "numero_inscription": { "type": "string", "minLength": 4, "maxLength": 24, "pattern": "^PYJ-[0-9A-Z-]+$" },
+        "nom": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "prenom": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "branche_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "branche_nom": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "service_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "service_nom": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "qr_token": { "type": "string", "minLength": 24, "maxLength": 80, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "public_visible": { "type": "boolean" },
+        "statut_entree": { "type": "boolean" },
+        "date_entree": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "numero_inscription",
+        "nom",
+        "prenom",
+        "branche_id",
+        "branche_nom",
+        "service_id",
+        "service_nom",
+        "qr_token",
+        "public_visible",
+        "statut_entree",
+        "date_entree",
+        "created_at"
+      ]
+    },
+    "ParticipantPrivate": {
+      "title": "ParticipantPrivate",
+      "description": "Protected phone contact information never exposed publicly",
+      "type": "object",
+      "properties": {
+        "participant_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "contact": { "type": "string", "minLength": 8, "maxLength": 24, "pattern": "^\\+[0-9]{8,18}$" },
+        "phone_hash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participant_id", "contact", "phone_hash", "created_at"]
+    },
+    "RegistrationLock": {
+      "title": "RegistrationLock",
+      "description": "Duplicate registration prevention lock keyed by SHA-256 phone hash",
+      "type": "object",
+      "properties": {
+        "participant_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participant_id", "created_at"]
+    }
+  },
+  "firestore": {
+    "/branches/{branchId}": {
+      "schema": { "$ref": "#/entities/Branch" },
+      "description": "Organization branches available in the registration form"
+    },
+    "/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/Service" },
+      "description": "Department services available in the registration form"
+    },
+    "/event_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/EventSettings" },
+      "description": "Event configuration and theme customization"
+    },
+    "/event_posters/{posterId}": {
+      "schema": { "$ref": "#/entities/EventPoster" },
+      "description": "Official Pyjama Party event poster image"
+    },
+    "/participants_public/{participantId}": {
+      "schema": { "$ref": "#/entities/ParticipantPublic" },
+      "description": "Non-PII public participant registration and QR ticket"
+    },
+    "/participants_private/{participantId}": {
+      "schema": { "$ref": "#/entities/ParticipantPrivate" },
+      "description": "Protected phone contact information"
+    },
+    "/registration_locks/{phoneHash}": {
+      "schema": { "$ref": "#/entities/RegistrationLock" },
+      "description": "Duplicate registration prevention lock"
+    }
+  }
+}
