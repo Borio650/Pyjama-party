@@ -19,6 +19,7 @@ import { PosterHero } from './components/PosterHero';
 import { RegistrationForm } from './components/RegistrationForm';
 import { ParticipantsGallery } from './components/ParticipantsGallery';
 import { TicketModal } from './components/TicketModal';
+import { TableauDeBord } from './components/TableauDeBord';
 
 const AUTHORIZED_BRANCHES: BranchItem[] = DEFAULT_BRANCHES.map((b) => ({
   ...b,
@@ -26,6 +27,10 @@ const AUTHORIZED_BRANCHES: BranchItem[] = DEFAULT_BRANCHES.map((b) => ({
 }));
 
 function PyjamaPartyApp() {
+  const [view, setView] = useState<'public' | 'dashboard'>('public');
+  // Bearer token held strictly in memory (never localStorage/sessionStorage)
+  const [dashboardToken, setDashboardToken] = useState<string | null>(null);
+
   const [settings, setSettings] = useState<EventSettings>(DEFAULT_EVENT_SETTINGS);
   const [poster, setPoster] = useState<EventPoster | null>(null);
   const [publicParticipants, setPublicParticipants] = useState<ParticipantPublic[]>([]);
@@ -62,27 +67,45 @@ function PyjamaPartyApp() {
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F8FC] text-slate-900">
       <Navbar
+        view={view}
+        onSwitchView={(next) => {
+          setView(next);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         hasTicket={Boolean(latestTicket)}
         onOpenTicket={() => {
           if (latestTicket) setModalTicket(latestTicket);
         }}
       />
 
-      <main className="flex-1">
-        <PosterHero poster={poster} settings={settings} />
+      {view === 'public' ? (
+        <main className="flex-1">
+          <PosterHero poster={poster} settings={settings} />
 
-        <RegistrationForm
-          settings={settings}
-          branches={AUTHORIZED_BRANCHES}
-          onRegistered={handleRegistered}
-        />
+          <RegistrationForm
+            settings={settings}
+            branches={AUTHORIZED_BRANCHES}
+            onRegistered={handleRegistered}
+          />
 
-        <ParticipantsGallery
-          participants={publicParticipants}
-          visible={true}
-          onSelectTicket={(p) => setModalTicket(p)}
-        />
-      </main>
+          <ParticipantsGallery
+            participants={publicParticipants}
+            visible={true}
+            onSelectTicket={(p) => setModalTicket(p)}
+          />
+        </main>
+      ) : (
+        <main className="flex-1">
+          <TableauDeBord
+            token={dashboardToken}
+            onAuthenticated={(tok) => setDashboardToken(tok)}
+            onLock={() => setDashboardToken(null)}
+            participants={publicParticipants}
+            branches={AUTHORIZED_BRANCHES}
+            eventTitle={settings.titre}
+          />
+        </main>
+      )}
 
       <footer className="border-t border-slate-200 bg-white py-6 px-4 sm:px-6 mt-auto">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">

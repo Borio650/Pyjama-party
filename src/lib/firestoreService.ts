@@ -1,8 +1,10 @@
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   Timestamp,
@@ -286,5 +288,58 @@ export async function deleteOfficialPoster(
     await batch.commit();
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, 'event_posters/official');
+  }
+}
+
+export async function lookupParticipantByTokenOrCode(
+  rawCode: string
+): Promise<ParticipantPublic | null> {
+  const code = rawCode.trim();
+  if (!code) return null;
+
+  try {
+    const isTicketNum = code.toUpperCase().startsWith('PYJ-');
+    const q = isTicketNum
+      ? query(
+          collection(db, 'participants_public'),
+          where('numero_inscription', '==', code.toUpperCase())
+        )
+      : query(collection(db, 'participants_public'), where('qr_token', '==', code));
+
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+
+    const docSnap = snap.docs[0];
+    return mapParticipantPublic(docSnap.id, docSnap.data() as Record<string, unknown>);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, 'participants_public');
+  }
+}
+
+export async function validateParticipantPresence(
+  participantId: string
+): Promise<{ status: 'validated' | 'already_used' | 'not_found'; dateEntree: Date | null }> {
+  const ref = doc(db, 'participants_public', participantId);
+  try {
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) {
+        return { status: 'not_found' as const, dateEntree: null };
+      }
+      const data = snap.data();
+      if (data.statut_entree === true) {
+        return {
+          status: 'already_used' as const,
+          dateEntree: toNullableDate(data.date_entree),
+        };
+      }
+      tx.update(ref, {
+        statut_entree: true,
+        date_entree: serverTimestamp(),
+      });
+      return { status: 'validated' as const, dateEntree: new Date() };
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `participants_public/${participantId}`);
   }
 }

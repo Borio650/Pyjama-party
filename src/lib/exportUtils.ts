@@ -353,3 +353,141 @@ export function exportParticipantsPdf(
 
   doc.save(`participants-pyjama-party-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
+
+export function exportPresenceExcel(participants: ParticipantPublic[]): void {
+  const rows = participants.map((p) => ({
+    Présence: p.statut_entree ? 'Présente' : 'Absente',
+    Nom: p.nom,
+    Prénom: p.prenom,
+    'N° Inscription': p.numero_inscription,
+    Branche: p.branche_nom,
+    Service: p.service_nom,
+    "Date d'inscription": formatDateFr(p.created_at),
+    'Heure de scan': p.date_entree ? formatDateFr(p.date_entree) : '—',
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  worksheet['!cols'] = [
+    { wch: 14 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 24 },
+    { wch: 24 },
+    { wch: 20 },
+    { wch: 20 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Participants');
+  XLSX.writeFile(
+    workbook,
+    `presence-pyjama-party-${new Date().toISOString().slice(0, 10)}.xlsx`
+  );
+}
+
+export function exportPresenceCsv(participants: ParticipantPublic[]): void {
+  const headers = [
+    'Présence',
+    'Nom',
+    'Prénom',
+    'N° Inscription',
+    'Branche',
+    'Service',
+    "Date d'inscription",
+    'Heure de scan',
+  ];
+
+  const escapeCsv = (val: string) => `"${val.replace(/"/g, '""')}"`;
+
+  const lines = [
+    headers.map(escapeCsv).join(';'),
+    ...participants.map((p) =>
+      [
+        p.statut_entree ? 'Présente' : 'Absente',
+        p.nom,
+        p.prenom,
+        p.numero_inscription,
+        p.branche_nom,
+        p.service_nom,
+        formatDateFr(p.created_at),
+        p.date_entree ? formatDateFr(p.date_entree) : '—',
+      ]
+        .map(escapeCsv)
+        .join(';')
+    ),
+  ];
+
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {
+    type: 'text/csv;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `presence-pyjama-party-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function exportPresencePdf(
+  participants: ParticipantPublic[],
+  eventTitle: string
+): void {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`Liste des inscrits — ${eventTitle}`, 14, 16);
+
+  const presentes = participants.filter((p) => p.statut_entree).length;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    `Exporté le ${formatDateFr(new Date())} · Total : ${participants.length} · Présentes : ${presentes} · Absentes : ${participants.length - presentes}`,
+    14,
+    22
+  );
+
+  autoTable(doc, {
+    startY: 27,
+    head: [[
+      'Présence',
+      'Nom',
+      'Prénom',
+      'N°',
+      'Branche',
+      'Service',
+      "Date d'inscription",
+      'Heure de scan',
+    ]],
+    body: participants.map((p) => [
+      p.statut_entree ? 'Présente' : 'Absente',
+      p.nom,
+      p.prenom,
+      p.numero_inscription,
+      p.branche_nom,
+      p.service_nom,
+      formatDateFr(p.created_at),
+      p.date_entree ? formatDateFr(p.date_entree) : '—',
+    ]),
+    styles: {
+      fontSize: 8.5,
+      cellPadding: 2.5,
+      textColor: [15, 23, 42],
+    },
+    headStyles: {
+      fillColor: [30, 27, 75],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+  });
+
+  doc.save(`presence-pyjama-party-${new Date().toISOString().slice(0, 10)}.pdf`);
+}

@@ -153,7 +153,17 @@ service cloud.firestore {
         incoming().public_visible == true &&
         existsAfter(/databases/$(database)/documents/participants_private/$(participantId));
 
-      allow update, delete: if false;
+      allow update: if isValidId(participantId) &&
+        isValidParticipantPublic(incoming()) &&
+        existing().statut_entree == false &&
+        incoming().statut_entree == true &&
+        incoming().date_entree == request.time &&
+        incoming().created_at == existing().created_at &&
+        incoming().qr_token == existing().qr_token &&
+        incoming().numero_inscription == existing().numero_inscription &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['statut_entree', 'date_entree']);
+
+      allow delete: if false;
     }
 
     match /participants_private/{participantId} {
