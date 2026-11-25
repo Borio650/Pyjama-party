@@ -28,8 +28,6 @@ const AUTHORIZED_BRANCHES: BranchItem[] = DEFAULT_BRANCHES.map((b) => ({
 
 function PyjamaPartyApp() {
   const [view, setView] = useState<'public' | 'dashboard'>('public');
-  // Bearer token held strictly in memory (never localStorage/sessionStorage)
-  const [dashboardToken, setDashboardToken] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<EventSettings>(DEFAULT_EVENT_SETTINGS);
   const [poster, setPoster] = useState<EventPoster | null>(null);
@@ -97,12 +95,13 @@ function PyjamaPartyApp() {
       ) : (
         <main className="flex-1">
           <TableauDeBord
-            token={dashboardToken}
-            onAuthenticated={(tok) => setDashboardToken(tok)}
-            onLock={() => setDashboardToken(null)}
             participants={publicParticipants}
             branches={AUTHORIZED_BRANCHES}
             eventTitle={settings.titre}
+            onBack={() => {
+              setView('public');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         </main>
       )}

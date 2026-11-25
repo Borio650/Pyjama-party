@@ -3,19 +3,15 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   AlertTriangle,
+  ArrowLeft,
   Camera,
   CameraOff,
   CheckCircle2,
   Clock,
   Download,
-  Eye,
-  EyeOff,
   FileSpreadsheet,
   FileText,
-  KeyRound,
   Loader2,
-  Lock,
-  LogOut,
   QrCode,
   RotateCcw,
   Search,
@@ -37,30 +33,18 @@ import {
 const SCANNER_ID = 'tableau-qr-scanner';
 
 interface TableauDeBordProps {
-  token: string | null;
-  onAuthenticated: (token: string) => void;
-  onLock: () => void;
   participants: ParticipantPublic[];
   branches: BranchItem[];
   eventTitle: string;
+  onBack?: () => void;
 }
 
 export const TableauDeBord: React.FC<TableauDeBordProps> = ({
-  token,
-  onAuthenticated,
-  onLock,
   participants,
   branches,
   eventTitle,
+  onBack,
 }) => {
-  // Auth state
-  const [checkingStatus, setCheckingStatus] = useState(false);
-  const [needsSetup, setNeedsSetup] = useState(false);
-  const [passcode, setPasscode] = useState('');
-  const [showPasscode, setShowPasscode] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [submittingAuth, setSubmittingAuth] = useState(false);
-
   // Scanner state
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lastScannedRef = useRef<string>('');
@@ -84,47 +68,6 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
   const [qrInspect, setQrInspect] = useState<ParticipantPublic | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
 
-  const [serverUnreachable, setServerUnreachable] = useState(false);
-
-  const checkAuthStatus = async () => {
-    setCheckingStatus(true);
-    setAuthError(null);
-    setServerUnreachable(false);
-
-    let lastErr: Error | null = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const res = await fetch('/api/admin/auth-status', {
-          cache: 'no-store',
-          credentials: 'same-origin',
-        });
-        const contentType = res.headers.get('content-type') || '';
-        if (!res.ok || !contentType.includes('application/json')) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        setNeedsSetup(Boolean(data?.needsSetup));
-        setCheckingStatus(false);
-        return;
-      } catch (err) {
-        lastErr = err instanceof Error ? err : new Error('Erreur réseau');
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 450));
-        }
-      }
-    }
-
-    console.warn('Auth status check failed:', lastErr?.message);
-    setServerUnreachable(true);
-    setCheckingStatus(false);
-  };
-
-  // Check server auth status when unauthenticated
-  useEffect(() => {
-    if (token) return;
-    void checkAuthStatus();
-  }, [token]);
-
   const stopCamera = async () => {
     const instance = scannerRef.current;
     if (instance) {
@@ -146,81 +89,6 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
       void stopCamera();
     };
   }, []);
-
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (submittingAuth) return;
-    setAuthError(null);
-
-    if (!passcode.trim()) {
-      setAuthError('Veuillez saisir le mot de passe.');
-      return;
-    }
-
-    setSubmittingAuth(true);
-    try {
-      const endpoint = needsSetup ? '/api/admin/setup' : '/api/admin/login';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        credentials: 'same-origin',
-        body: JSON.stringify({ passcode }),
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        setAuthError(
-          "Le serveur backend n'a pas encore répondu. Actualisez la page puis réessayez."
-        );
-        return;
-      }
-
-      const data = await res.json();
-      if (!res.ok) {
-        if (res.status === 412 && data?.needsSetup) {
-          // Automatically claim on first run when submitting the initial passcode
-          const setupRes = await fetch('/api/admin/setup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            cache: 'no-store',
-            credentials: 'same-origin',
-            body: JSON.stringify({ passcode }),
-          });
-          const setupType = setupRes.headers.get('content-type') || '';
-          if (!setupType.includes('application/json')) {
-            setAuthError(
-              "Le serveur backend n'a pas encore répondu. Actualisez la page puis réessayez."
-            );
-            return;
-          }
-          const setupData = await setupRes.json();
-          if (setupRes.ok && setupData?.token) {
-            setPasscode('');
-            setServerUnreachable(false);
-            onAuthenticated(setupData.token);
-            return;
-          }
-          setNeedsSetup(true);
-          setAuthError(setupData?.error || 'Impossible de définir le mot de passe.');
-          return;
-        }
-        setAuthError(data?.error || 'Mot de passe incorrect.');
-        return;
-      }
-      if (data?.token) {
-        setPasscode('');
-        setServerUnreachable(false);
-        onAuthenticated(data.token);
-      }
-    } catch {
-      setAuthError(
-        'Connexion au serveur interrompue. Veuillez actualiser la page et réessayer.'
-      );
-    } finally {
-      setSubmittingAuth(false);
-    }
-  };
 
   const handleLookup = async (raw: string) => {
     const code = raw.trim();
@@ -365,120 +233,9 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
     }).format(d);
   };
 
-  // --- Passcode Gate ---
-  if (!token) {
-    return (
-      <section className="min-h-[75vh] flex items-center justify-center p-4 sm:p-6">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm">
-          <div
-            className="w-12 h-12 mx-auto mb-4 rounded-xl flex items-center justify-center"
-            style={{
-              backgroundColor: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)',
-              color: 'var(--brand-primary)',
-            }}
-          >
-            <KeyRound className="w-6 h-6" aria-hidden="true" />
-          </div>
-
-          <h1 className="font-display text-2xl font-bold text-slate-900 text-center mb-2">
-            {needsSetup ? 'Configurer le mot de passe' : 'Accès au Tableau de bord'}
-          </h1>
-          <p className="text-sm text-slate-600 text-center mb-6 leading-relaxed">
-            {needsSetup
-              ? 'Définissez le mot de passe administrateur pour protéger l’accès à la liste des inscrits et au scanner QR Code.'
-              : 'Saisissez le mot de passe administrateur pour voir toutes les personnes inscrites et scanner les QR Codes à l’entrée.'}
-          </p>
-
-          {checkingStatus ? (
-            <div className="py-6 flex items-center justify-center gap-2 text-sm text-slate-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Vérification...</span>
-            </div>
-          ) : (
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
-              {serverUnreachable && !authError && (
-                <div
-                  role="status"
-                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs sm:text-sm text-amber-900 flex items-start justify-between gap-3"
-                >
-                  <span>
-                    Serveur de vérification temporairement indisponible. Actualisez la page ou réessayez.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void checkAuthStatus()}
-                    className="inline-flex items-center gap-1 font-semibold underline shrink-0 cursor-pointer hover:text-amber-950"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Réessayer</span>
-                  </button>
-                </div>
-              )}
-
-              {authError && (
-                <div
-                  role="alert"
-                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs sm:text-sm text-red-800"
-                >
-                  {authError}
-                </div>
-              )}
-
-              <div>
-                <label
-                  htmlFor="dashboard-passcode"
-                  className="block text-sm font-medium text-slate-800 mb-1.5"
-                >
-                  Mot de passe
-                </label>
-                <div className="relative">
-                  <input
-                    id="dashboard-passcode"
-                    type={showPasscode ? 'text' : 'password'}
-                    required
-                    autoFocus
-                    value={passcode}
-                    onChange={(e) => setPasscode(e.target.value)}
-                    placeholder="Entrez le mot de passe"
-                    className="w-full min-h-[44px] pl-3.5 pr-11 py-2.5 text-sm text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasscode((v) => !v)}
-                    aria-label={showPasscode ? 'Masquer' : 'Afficher'}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-500 hover:text-slate-800 cursor-pointer"
-                  >
-                    {showPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submittingAuth}
-                className="w-full min-h-[46px] inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold rounded-xl text-white transition-opacity hover:opacity-95 disabled:opacity-60 cursor-pointer"
-                style={{ backgroundColor: 'var(--brand-primary)' }}
-              >
-                {submittingAuth ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Lock className="w-4 h-4" />
-                )}
-                <span>
-                  {needsSetup ? 'Enregistrer et ouvrir' : 'Accéder au Tableau de bord'}
-                </span>
-              </button>
-            </form>
-          )}
-        </div>
-      </section>
-    );
-  }
-
-  // --- Authenticated Dashboard ---
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-      {/* Header + Counters */}
+      {/* Header + Return Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900">
@@ -489,17 +246,19 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            void stopCamera();
-            onLock();
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 shrink-0 self-start sm:self-auto cursor-pointer"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Verrouiller</span>
-        </button>
+        {onBack && (
+          <button
+            type="button"
+            onClick={() => {
+              void stopCamera();
+              onBack();
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 shrink-0 self-start sm:self-auto cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Retour aux inscriptions</span>
+          </button>
+        )}
       </div>
 
       {/* KPI Row */}

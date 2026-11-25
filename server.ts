@@ -2,13 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import {
-  handleAuthStatus,
-  handleHealth,
-  handleLogin,
-  handleSetup,
-  handleVerify,
-} from './api/_lib/adminAuth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,27 +12,6 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 async function startServer() {
   const app = express();
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '1mb' }));
-
-  app.get('/api/health', (req, res) => {
-    void handleHealth(req, res);
-  });
-
-  app.get('/api/admin/auth-status', (req, res) => {
-    void handleAuthStatus(req, res);
-  });
-
-  app.post('/api/admin/setup', (req, res) => {
-    void handleSetup(req, res);
-  });
-
-  app.post('/api/admin/login', (req, res) => {
-    void handleLogin(req, res);
-  });
-
-  app.get('/api/admin/verify', (req, res) => {
-    void handleVerify(req, res);
-  });
 
   if (!IS_PROD) {
     const { createServer: createViteServer } = await import('vite');
