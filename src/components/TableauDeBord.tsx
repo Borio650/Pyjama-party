@@ -84,27 +84,45 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
   const [qrInspect, setQrInspect] = useState<ParticipantPublic | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
 
+  const [serverUnreachable, setServerUnreachable] = useState(false);
+
+  const checkAuthStatus = async () => {
+    setCheckingStatus(true);
+    setAuthError(null);
+    setServerUnreachable(false);
+
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch('/api/admin/auth-status', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setNeedsSetup(Boolean(data?.needsSetup));
+        setCheckingStatus(false);
+        return;
+      } catch (err) {
+        lastErr = err instanceof Error ? err : new Error('Erreur réseau');
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 450));
+        }
+      }
+    }
+
+    console.warn('Auth status check failed:', lastErr?.message);
+    setServerUnreachable(true);
+    setCheckingStatus(false);
+  };
+
   // Check server auth status when unauthenticated
   useEffect(() => {
     if (token) return;
-    let active = true;
-    setCheckingStatus(true);
-    fetch('/api/admin/auth-status')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!active) return;
-        setNeedsSetup(Boolean(data?.needsSetup));
-      })
-      .catch(() => {
-        if (!active) return;
-        setAuthError('Impossible de joindre le serveur de vérification.');
-      })
-      .finally(() => {
-        if (active) setCheckingStatus(false);
-      });
-    return () => {
-      active = false;
-    };
+    void checkAuthStatus();
   }, [token]);
 
   const stopCamera = async () => {
@@ -145,22 +163,60 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        credentials: 'same-origin',
         body: JSON.stringify({ passcode }),
       });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setAuthError(
+          "Le serveur backend n'a pas encore répondu. Actualisez la page puis réessayez."
+        );
+        return;
+      }
+
       const data = await res.json();
       if (!res.ok) {
-        if (data?.needsSetup) {
+        if (res.status === 412 && data?.needsSetup) {
+          // Automatically claim on first run when submitting the initial passcode
+          const setupRes = await fetch('/api/admin/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store',
+            credentials: 'same-origin',
+            body: JSON.stringify({ passcode }),
+          });
+          const setupType = setupRes.headers.get('content-type') || '';
+          if (!setupType.includes('application/json')) {
+            setAuthError(
+              "Le serveur backend n'a pas encore répondu. Actualisez la page puis réessayez."
+            );
+            return;
+          }
+          const setupData = await setupRes.json();
+          if (setupRes.ok && setupData?.token) {
+            setPasscode('');
+            setServerUnreachable(false);
+            onAuthenticated(setupData.token);
+            return;
+          }
           setNeedsSetup(true);
+          setAuthError(setupData?.error || 'Impossible de définir le mot de passe.');
+          return;
         }
         setAuthError(data?.error || 'Mot de passe incorrect.');
         return;
       }
       if (data?.token) {
         setPasscode('');
+        setServerUnreachable(false);
         onAuthenticated(data.token);
       }
     } catch {
-      setAuthError('Erreur de connexion au serveur.');
+      setAuthError(
+        'Connexion au serveur interrompue. Veuillez actualiser la page et réessayer.'
+      );
     } finally {
       setSubmittingAuth(false);
     }
@@ -340,6 +396,25 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
             </div>
           ) : (
             <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {serverUnreachable && !authError && (
+                <div
+                  role="status"
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs sm:text-sm text-amber-900 flex items-start justify-between gap-3"
+                >
+                  <span>
+                    Serveur de vérification temporairement indisponible. Actualisez la page ou réessayez.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void checkAuthStatus()}
+                    className="inline-flex items-center gap-1 font-semibold underline shrink-0 cursor-pointer hover:text-amber-950"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Réessayer</span>
+                  </button>
+                </div>
+              )}
+
               {authError && (
                 <div
                   role="alert"

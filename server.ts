@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Ephemeral fallback signing key when SESSION_SECRET is not provided
@@ -47,7 +47,6 @@ function getConfiguredEnvPasscode(): string {
 function verifySubmittedPasscode(submitted: string): boolean {
   const envPass = getConfiguredEnvPasscode();
   if (envPass.length > 0) {
-    // Compare normalized SHA-256 digests with timingSafeEqual to avoid length leaks
     const a = crypto.createHash('sha256').update(submitted.trim()).digest();
     const b = crypto.createHash('sha256').update(envPass).digest();
     return crypto.timingSafeEqual(a, b);
@@ -62,7 +61,7 @@ function issueBearerToken(): string {
   const payload = {
     role: 'admin',
     iat: Date.now(),
-    exp: Date.now() + 12 * 60 * 60 * 1000, // 12 hours
+    exp: Date.now() + 12 * 60 * 60 * 1000,
     nonce: crypto.randomBytes(8).toString('hex'),
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
@@ -99,7 +98,19 @@ function verifyBearerToken(token: string): boolean {
 
 async function startServer() {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '1mb' }));
+
+  // Prevent proxy or browser caching of API responses
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    next();
+  });
+
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true });
+  });
 
   app.get('/api/admin/auth-status', (_req, res) => {
     const hasEnv = getConfiguredEnvPasscode().length > 0;
@@ -186,7 +197,7 @@ async function startServer() {
   } else {
     const distDir = path.resolve(__dirname, 'dist');
     app.use(express.static(distDir));
-    app.get('/{*splat}', (_req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distDir, 'index.html'));
     });
   }
