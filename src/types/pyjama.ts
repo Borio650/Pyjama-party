@@ -88,9 +88,8 @@ export const DEFAULT_BRANCHES: Omit<BranchItem, 'created_at'>[] = [
   { id: 'dunamis-cocody', nom_branche: 'DUNAMIS (COCODY)', ordre: 3, active: true },
   { id: 'loyaute-selmer', nom_branche: 'LOYAUTÉ (SELMER)', ordre: 4, active: true },
   { id: 'france', nom_branche: 'FRANCE', ordre: 5, active: true },
-  { id: 'odiene', nom_branche: 'ODIENE', ordre: 6, active: true },
+  { id: 'odienne', nom_branche: 'ODIENNE', ordre: 6, active: true },
   { id: 'prodige-bassam', nom_branche: 'PRODIGE (BASSAM)', ordre: 7, active: true },
   { id: 'faveur-divine-a-gauche', nom_branche: 'FAVEUR DIVINE (A GAUCHE)', ordre: 8, active: true },
-  { id: 'koute', nom_branche: 'KOUTÉ', ordre: 9, active: true },
-  { id: 'zoe-gesco', nom_branche: 'ZOE (GESCO)', ordre: 10, active: true },
+  { id: 'zoe-gesco', nom_branche: 'ZOE (GESCO)', ordre: 9, active: true },
 ];
