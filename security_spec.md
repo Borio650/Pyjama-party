@@ -6,6 +6,7 @@
 3. **Single-Use Ticket Check-In**: `statut_entree` is initialized to `false` and `date_entree` to `null` at creation. Only an admin can transition `statut_entree` from `false` to `true`, with `date_entree == request.time`. A second check-in attempt (`existing().statut_entree == true`) is rejected.
 4. **Public Visibility Gate**: When `event_settings/main.affichage_public_participants == false`, new registrations must set `public_visible == false` and public `list`/`get` queries on `participants_public` are blocked for non-admins when `public_visible == false`.
 5. **Unverified Email & Admin Privilege Protection**: Admin checks require `request.auth.token.email_verified == true`. Non-admins cannot create/modify `admins/{uid}`, `event_settings`, `event_posters`, `branches`, or `services`.
+6. **Dashboard Passcode Fallback Protection**: `app_auth/dashboard` stores only a write-once salted `scrypt` hash (`salt` 32 hex chars, `hash` 128 hex chars, `created_at == request.time`), never plaintext credentials. `list`, `update`, and `delete` are strictly denied.
 
 ## 2. Adversarial Test Payloads ("Dirty Dozen")
 1. **PII Leak Attempt**: Unauthenticated `get` or `list` on `/participants_private/{id}` -> DENIED.

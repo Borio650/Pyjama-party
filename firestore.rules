@@ -101,6 +101,14 @@ service cloud.firestore {
         data.created_at is timestamp;
     }
 
+    function isValidAppAuth(data) {
+      return data.keys().hasAll(['salt', 'hash', 'created_at']) &&
+        data.keys().hasOnly(['salt', 'hash', 'created_at']) &&
+        data.salt is string && data.salt.size() == 32 && data.salt.matches('^[a-f0-9]{32}$') &&
+        data.hash is string && data.hash.size() == 128 && data.hash.matches('^[a-f0-9]{128}$') &&
+        data.created_at is timestamp;
+    }
+
     // --- Collection Rules ---
 
     match /branches/{branchId} {
@@ -185,6 +193,15 @@ service cloud.firestore {
         incoming().created_at == request.time &&
         existsAfter(/databases/$(database)/documents/participants_public/$(incoming().participant_id)) &&
         existsAfter(/databases/$(database)/documents/participants_private/$(incoming().participant_id));
+      allow update, delete: if false;
+    }
+
+    match /app_auth/{authId} {
+      allow get: if isValidId(authId) && authId == 'dashboard';
+      allow list: if false;
+      allow create: if isValidId(authId) && authId == 'dashboard' &&
+        isValidAppAuth(incoming()) &&
+        incoming().created_at == request.time;
       allow update, delete: if false;
     }
   }
