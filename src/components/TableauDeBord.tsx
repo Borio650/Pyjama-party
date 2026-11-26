@@ -1,11 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import React, { useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  AlertTriangle,
   ArrowLeft,
-  Camera,
-  CameraOff,
   CheckCircle2,
   Clock,
   Download,
@@ -13,24 +9,18 @@ import {
   FileText,
   Loader2,
   QrCode,
-  RotateCcw,
   Search,
   UserCheck,
   X,
 } from 'lucide-react';
 import type { BranchItem, ParticipantPublic } from '../types/pyjama';
-import {
-  lookupParticipantByTokenOrCode,
-  validateParticipantPresence,
-} from '../lib/firestoreService';
+import { validateParticipantPresence } from '../lib/firestoreService';
 import {
   downloadTicketPdf,
   exportPresenceCsv,
   exportPresenceExcel,
   exportPresencePdf,
 } from '../lib/exportUtils';
-
-const SCANNER_ID = 'tableau-qr-scanner';
 
 interface TableauDeBordProps {
   participants: ParticipantPublic[];
@@ -45,157 +35,30 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
   eventTitle,
   onBack,
 }) => {
-  // Scanner state
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const lastScannedRef = useRef<string>('');
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [manualCode, setManualCode] = useState('');
-  const [lookingUp, setLookingUp] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const [scanResult, setScanResult] = useState<{
-    found: boolean;
-    query: string;
-    participant: ParticipantPublic | null;
-    justValidated?: boolean;
-    alreadyScanned?: boolean;
-  } | null>(null);
-
-  // Table filters & modal
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBranch, setFilterBranch] = useState('all');
   const [filterPresence, setFilterPresence] = useState<'all' | 'presente' | 'absente'>('all');
   const [qrInspect, setQrInspect] = useState<ParticipantPublic | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [lastMarkedName, setLastMarkedName] = useState<string | null>(null);
 
-  const stopCamera = async () => {
-    const instance = scannerRef.current;
-    if (instance) {
-      try {
-        if (instance.isScanning) {
-          await instance.stop();
-        }
-        instance.clear();
-      } catch {
-        // Ignore cleanup errors
-      }
-      scannerRef.current = null;
-    }
-    setCameraActive(false);
-  };
-
-  useEffect(() => {
-    return () => {
-      void stopCamera();
-    };
-  }, []);
-
-  const handleLookup = async (raw: string) => {
-    const code = raw.trim();
-    if (!code) return;
-    setLookingUp(true);
-    setCameraError(null);
-    try {
-      const found = await lookupParticipantByTokenOrCode(code);
-      setScanResult({
-        found: Boolean(found),
-        query: code,
-        participant: found,
-        alreadyScanned: Boolean(found?.statut_entree),
-      });
-    } catch (err) {
-      setCameraError(
-        err instanceof Error ? err.message : 'Erreur lors de la recherche du QR Code.'
-      );
-    } finally {
-      setLookingUp(false);
-    }
-  };
-
-  const startCamera = async () => {
-    setCameraError(null);
-    await stopCamera();
-    try {
-      const qr = new Html5Qrcode(SCANNER_ID);
-      scannerRef.current = qr;
-      await qr.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        async (decodedText) => {
-          if (decodedText === lastScannedRef.current) return;
-          lastScannedRef.current = decodedText;
-          await stopCamera();
-          await handleLookup(decodedText);
-        },
-        () => {}
-      );
-      setCameraActive(true);
-    } catch (err) {
-      scannerRef.current = null;
-      setCameraActive(false);
-      setCameraError(
-        err instanceof Error && err.message.toLowerCase().includes('permission')
-          ? "Accès à la caméra refusé. Autorisez la caméra ou saisissez le code manuellement."
-          : "Caméra indisponible sur cet appareil. Utilisez la recherche manuelle ci-dessous."
-      );
-    }
-  };
-
-  const handleConfirmPresence = async (participantId: string) => {
-    if (validating) return;
-    setValidating(true);
-    setCameraError(null);
-    try {
-      const res = await validateParticipantPresence(participantId);
-      if (scanResult?.participant && scanResult.participant.id === participantId) {
-        if (res.status === 'already_used') {
-          setScanResult({
-            ...scanResult,
-            participant: {
-              ...scanResult.participant,
-              statut_entree: true,
-              date_entree: res.dateEntree,
-            },
-            alreadyScanned: true,
-            justValidated: false,
-          });
-        } else if (res.status === 'validated') {
-          setScanResult({
-            ...scanResult,
-            participant: {
-              ...scanResult.participant,
-              statut_entree: true,
-              date_entree: res.dateEntree ?? new Date(),
-            },
-            justValidated: true,
-            alreadyScanned: false,
-          });
-        }
-      }
-    } catch (err) {
-      setCameraError(
-        err instanceof Error ? err.message : 'Erreur lors de la validation.'
-      );
-    } finally {
-      setValidating(false);
-    }
-  };
-
-  const handleDirectMarkPresent = async (participant: ParticipantPublic) => {
+  const handleMarkPresent = async (participant: ParticipantPublic) => {
     if (participant.statut_entree || markingId) return;
     setMarkingId(participant.id);
+    setActionError(null);
     try {
-      await validateParticipantPresence(participant.id);
+      const res = await validateParticipantPresence(participant.id);
+      if (res.status === 'validated' || res.status === 'already_used') {
+        setLastMarkedName(`${participant.nom.toUpperCase()} ${participant.prenom}`);
+      }
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Erreur lors de la validation de présence.'
+      );
     } finally {
       setMarkingId(null);
     }
-  };
-
-  const resetScanner = () => {
-    lastScannedRef.current = '';
-    setScanResult(null);
-    setManualCode('');
-    setCameraError(null);
   };
 
   const totalCount = participants.length;
@@ -205,22 +68,42 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
   );
   const absentCount = totalCount - presentCount;
 
+  const trimmedQuery = searchTerm.trim().toLowerCase();
+
+  // Instant search matches (ignores dropdown filters so staff always finds anyone fast)
+  const instantMatches = useMemo(() => {
+    if (!trimmedQuery) return [];
+    return participants.filter((p) => {
+      const fullName = `${p.nom} ${p.prenom}`.toLowerCase();
+      const reverseName = `${p.prenom} ${p.nom}`.toLowerCase();
+      return (
+        fullName.includes(trimmedQuery) ||
+        reverseName.includes(trimmedQuery) ||
+        p.numero_inscription.toLowerCase().includes(trimmedQuery) ||
+        p.branche_nom.toLowerCase().includes(trimmedQuery) ||
+        p.service_nom.toLowerCase().includes(trimmedQuery)
+      );
+    });
+  }, [participants, trimmedQuery]);
+
+  // Complete table matches (combines search bar + branch/status filters)
   const filteredParticipants = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
     return participants.filter((p) => {
       if (filterBranch !== 'all' && p.branche_id !== filterBranch) return false;
       if (filterPresence === 'presente' && !p.statut_entree) return false;
       if (filterPresence === 'absente' && p.statut_entree) return false;
-      if (!q) return true;
+      if (!trimmedQuery) return true;
+      const fullName = `${p.nom} ${p.prenom}`.toLowerCase();
+      const reverseName = `${p.prenom} ${p.nom}`.toLowerCase();
       return (
-        p.nom.toLowerCase().includes(q) ||
-        p.prenom.toLowerCase().includes(q) ||
-        p.numero_inscription.toLowerCase().includes(q) ||
-        p.branche_nom.toLowerCase().includes(q) ||
-        p.service_nom.toLowerCase().includes(q)
+        fullName.includes(trimmedQuery) ||
+        reverseName.includes(trimmedQuery) ||
+        p.numero_inscription.toLowerCase().includes(trimmedQuery) ||
+        p.branche_nom.toLowerCase().includes(trimmedQuery) ||
+        p.service_nom.toLowerCase().includes(trimmedQuery)
       );
     });
-  }, [participants, searchTerm, filterBranch, filterPresence]);
+  }, [participants, trimmedQuery, filterBranch, filterPresence]);
 
   const formatDate = (d: Date | null) => {
     if (!d) return '—';
@@ -242,17 +125,14 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
             Tableau de bord — Contrôle des présences
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Scannez le QR Code de chaque participant pour faire passer son statut de « Absente » à « Présente ».
+            Recherchez un participant instantanément par son nom, prénom, numéro ou branche pour valider sa présence.
           </p>
         </div>
 
         {onBack && (
           <button
             type="button"
-            onClick={() => {
-              void stopCamera();
-              onBack();
-            }}
+            onClick={onBack}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 shrink-0 self-start sm:self-auto cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -283,211 +163,143 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
         </div>
       </div>
 
-      {/* Scanner Section */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          {/* Left: Camera + Manual Input */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-display text-lg font-bold text-slate-900">
-                  Scanner un QR Code
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Utilisez la caméra de votre téléphone ou saisissez le numéro PYJ.
-                </p>
-              </div>
-              {!cameraActive ? (
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-white shrink-0 cursor-pointer"
-                  style={{ backgroundColor: 'var(--brand-primary)' }}
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>Activer caméra</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void stopCamera()}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-800 shrink-0 cursor-pointer"
-                >
-                  <CameraOff className="w-4 h-4" />
-                  <span>Arrêter</span>
-                </button>
-              )}
-            </div>
-
-            <div className="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-200 min-h-[230px] flex items-center justify-center">
-              <div id={SCANNER_ID} className="w-full" />
-              {!cameraActive && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-slate-300">
-                  <QrCode className="w-9 h-9 mb-2.5 text-slate-400" />
-                  <p className="text-sm font-medium text-white">Caméra prête</p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                    Appuyez sur « Activer caméra » pour scanner le QR Code d’un participant.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {cameraError && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs sm:text-sm text-amber-900">
-                {cameraError}
-              </div>
-            )}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void handleLookup(manualCode);
-              }}
-              className="flex gap-2"
-            >
-              <input
-                type="text"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                placeholder="Saisir N° (ex. PYJ-123456) ou jeton QR"
-                className="flex-1 min-h-[42px] px-3.5 py-2 text-sm font-mono-tabular border border-slate-300 rounded-xl"
-              />
-              <button
-                type="submit"
-                disabled={lookingUp || !manualCode.trim()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer shrink-0"
-              >
-                {lookingUp ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Search className="w-4 h-4" />
-                )}
-                <span>Vérifier</span>
-              </button>
-            </form>
+      {/* Instant Search & Check-in Bar */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="font-display text-lg font-bold text-slate-900">
+              Recherche instantanée des participants
+            </h2>
+            <p className="text-xs text-slate-500">
+              Les résultats s’affichent au fur et à mesure de votre saisie pour pointer l’entrée en un clic.
+            </p>
           </div>
-
-          {/* Right: Scan Result */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Résultat du scan
-              </h3>
-              {scanResult && (
-                <button
-                  type="button"
-                  onClick={resetScanner}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Nouveau scan</span>
-                </button>
-              )}
-            </div>
-
-            {!scanResult ? (
-              <div className="py-12 px-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/70">
-                <UserCheck className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm text-slate-600">
-                  Scannez un QR Code ou recherchez un numéro pour valider la présence d’un participant.
-                </p>
-              </div>
-            ) : !scanResult.found || !scanResult.participant ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-center space-y-1.5">
-                <AlertTriangle className="w-8 h-8 text-red-600 mx-auto" />
-                <p className="font-display text-base font-bold text-red-900">
-                  Ticket introuvable
-                </p>
-                <p className="text-xs text-red-800">
-                  Aucun participant ne correspond à « {scanResult.query} ».
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {scanResult.justValidated ? (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-emerald-900">
-                        PRÉSENCE VALIDÉE : Présente
-                      </p>
-                      <p className="text-xs text-emerald-800 mt-0.5">
-                        Scanné le {formatDate(scanResult.participant.date_entree)}
-                      </p>
-                    </div>
-                  </div>
-                ) : scanResult.participant.statut_entree || scanResult.alreadyScanned ? (
-                  <div className="rounded-xl border border-red-300 bg-red-50 p-4 flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-red-900">
-                        DÉJÀ SCANNÉ — Statut : Présente
-                      </p>
-                      <p className="text-xs text-red-800 mt-0.5">
-                        Ce ticket a déjà été validé le {formatDate(scanResult.participant.date_entree)}.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-amber-900">
-                        TICKET VALIDE — Statut actuel : Absente
-                      </p>
-                      <p className="text-xs text-amber-800 mt-0.5">
-                        Appuyez ci-dessous pour enregistrer sa présence.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/70 space-y-2 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <span className="text-slate-500">Nom & Prénom</span>
-                    <span className="font-bold text-slate-900 text-right">
-                      {scanResult.participant.nom.toUpperCase()} {scanResult.participant.prenom}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-slate-500">N° Inscription</span>
-                    <span className="font-mono-tabular font-semibold text-slate-800">
-                      {scanResult.participant.numero_inscription}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-slate-500">Branche</span>
-                    <span className="text-slate-800 text-right">
-                      {scanResult.participant.branche_nom}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-slate-500">Service</span>
-                    <span className="text-slate-800 text-right">
-                      {scanResult.participant.service_nom}
-                    </span>
-                  </div>
-                </div>
-
-                {!scanResult.participant.statut_entree && (
-                  <button
-                    type="button"
-                    onClick={() => void handleConfirmPresence(scanResult.participant!.id)}
-                    disabled={validating}
-                    className="w-full min-h-[46px] inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
-                  >
-                    {validating ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="w-4 h-4" />
-                    )}
-                    <span>MARQUER PRÉSENTE</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          {trimmedQuery && (
+            <span className="font-mono-tabular text-xs font-semibold text-slate-600">
+              {instantMatches.length} résultat{instantMatches.length > 1 ? 's' : ''}
+            </span>
+          )}
         </div>
+
+        <div className="relative">
+          <Search
+            className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setLastMarkedName(null);
+            }}
+            placeholder="Rechercher instantanément par nom, prénom, N° PYJ, branche ou service..."
+            aria-label="Rechercher instantanément un participant"
+            className="w-full min-h-[48px] pl-11 pr-11 py-3 text-sm sm:text-base text-slate-900 border border-slate-300 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setLastMarkedName(null);
+              }}
+              aria-label="Effacer la recherche"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {actionError && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs sm:text-sm text-red-800"
+          >
+            {actionError}
+          </div>
+        )}
+
+        {lastMarkedName && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs sm:text-sm text-emerald-900 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              Présence confirmée pour <strong>{lastMarkedName}</strong> — statut mis à jour sur « Présente ».
+            </span>
+          </div>
+        )}
+
+        {trimmedQuery ? (
+          instantMatches.length === 0 ? (
+            <div className="py-8 px-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/60">
+              <p className="text-sm font-medium text-slate-700">
+                Aucun participant trouvé pour « {searchTerm.trim()} ».
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {instantMatches.slice(0, 8).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50/60"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {p.statut_entree ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          <span>Présente</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
+                          <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          <span>Absente</span>
+                        </span>
+                      )}
+                      <span className="font-semibold text-sm text-slate-900 truncate">
+                        {p.nom.toUpperCase()} {p.prenom}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1 truncate">
+                      <span className="font-mono-tabular font-semibold text-slate-700">
+                        {p.numero_inscription}
+                      </span>
+                      {' · '}
+                      {p.branche_nom} · {p.service_nom}
+                    </p>
+                  </div>
+
+                  {p.statut_entree ? (
+                    <span className="text-xs font-semibold text-emerald-700 shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                      Validée
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={markingId === p.id}
+                      onClick={() => void handleMarkPresent(p)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 shrink-0 cursor-pointer"
+                    >
+                      {markingId === p.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <UserCheck className="w-3.5 h-3.5" />
+                      )}
+                      <span>Marquer Présente</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          <div className="py-5 px-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+            <p className="text-xs sm:text-sm text-slate-500">
+              Commencez à taper dans la barre ci-dessus pour trouver instantanément un participant et valider sa présence.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Complete Participants List */}
@@ -534,21 +346,11 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Rechercher nom, prénom, N°, service..."
-              className="w-full min-h-[40px] pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-xl"
-            />
-          </div>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <select
             value={filterBranch}
             onChange={(e) => setFilterBranch(e.target.value)}
+            aria-label="Filtrer par branche"
             className="w-full min-h-[40px] px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
           >
             <option value="all">Toutes les branches</option>
@@ -564,6 +366,7 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
             onChange={(e) =>
               setFilterPresence(e.target.value as 'all' | 'presente' | 'absente')
             }
+            aria-label="Filtrer par statut de présence"
             className="w-full min-h-[40px] px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
           >
             <option value="all">Tous les statuts</option>
@@ -630,7 +433,7 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
                           <button
                             type="button"
                             onClick={() => setQrInspect(p)}
-                            title="Voir le QR Code"
+                            title="Voir le ticket"
                             className="p-1.5 rounded-lg text-slate-600 hover:text-slate-950 hover:bg-slate-100 cursor-pointer"
                           >
                             <QrCode className="w-4 h-4" />
@@ -639,7 +442,7 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
                             <button
                               type="button"
                               disabled={markingId === p.id}
-                              onClick={() => void handleDirectMarkPresent(p)}
+                              onClick={() => void handleMarkPresent(p)}
                               className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
                             >
                               {markingId === p.id ? '...' : 'Valider'}
@@ -656,7 +459,7 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
         </div>
       </div>
 
-      {/* QR Code Modal */}
+      {/* Ticket Modal */}
       {qrInspect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-sm w-full p-6 text-center relative">
