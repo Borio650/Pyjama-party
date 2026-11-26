@@ -155,13 +155,14 @@ service cloud.firestore {
 
       allow update: if isValidId(participantId) &&
         isValidParticipantPublic(incoming()) &&
-        existing().statut_entree == false &&
-        incoming().statut_entree == true &&
-        incoming().date_entree == request.time &&
         incoming().created_at == existing().created_at &&
         incoming().qr_token == existing().qr_token &&
         incoming().numero_inscription == existing().numero_inscription &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['statut_entree', 'date_entree']);
+        incoming().diff(existing()).affectedKeys().hasOnly(['statut_entree', 'date_entree']) &&
+        (
+          (existing().statut_entree == false && incoming().statut_entree == true && incoming().date_entree == request.time) ||
+          (existing().statut_entree == true && incoming().statut_entree == false && incoming().date_entree == null)
+        );
 
       allow delete: if false;
     }

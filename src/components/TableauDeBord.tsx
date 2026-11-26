@@ -14,7 +14,10 @@ import {
   X,
 } from 'lucide-react';
 import type { BranchItem, ParticipantPublic } from '../types/pyjama';
-import { validateParticipantPresence } from '../lib/firestoreService';
+import {
+  resetParticipantPresence,
+  validateParticipantPresence,
+} from '../lib/firestoreService';
 import {
   downloadTicketPdf,
   exportPresenceCsv,
@@ -55,6 +58,22 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Erreur lors de la validation de présence.'
+      );
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  const handleResetAbsent = async (participant: ParticipantPublic) => {
+    if (!participant.statut_entree || markingId) return;
+    setMarkingId(participant.id);
+    setActionError(null);
+    setLastMarkedName(null);
+    try {
+      await resetParticipantPresence(participant.id);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Erreur lors de la remise en statut Absente.'
       );
     } finally {
       setMarkingId(null);
@@ -271,9 +290,17 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
                   </div>
 
                   {p.statut_entree ? (
-                    <span className="text-xs font-semibold text-emerald-700 shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
-                      Validée
-                    </span>
+                    <button
+                      type="button"
+                      disabled={markingId === p.id}
+                      onClick={() => void handleResetAbsent(p)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-60 shrink-0 cursor-pointer"
+                    >
+                      {markingId === p.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : null}
+                      <span>Remettre Absente</span>
+                    </button>
                   ) : (
                     <button
                       type="button"
@@ -438,7 +465,7 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
                           >
                             <QrCode className="w-4 h-4" />
                           </button>
-                          {!p.statut_entree && (
+                          {!p.statut_entree ? (
                             <button
                               type="button"
                               disabled={markingId === p.id}
@@ -446,6 +473,15 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
                               className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
                             >
                               {markingId === p.id ? '...' : 'Valider'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={markingId === p.id}
+                              onClick={() => void handleResetAbsent(p)}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
+                            >
+                              {markingId === p.id ? '...' : 'Remettre Absente'}
                             </button>
                           )}
                         </div>

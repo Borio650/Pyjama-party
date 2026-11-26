@@ -343,3 +343,28 @@ export async function validateParticipantPresence(
     handleFirestoreError(err, OperationType.UPDATE, `participants_public/${participantId}`);
   }
 }
+
+export async function resetParticipantPresence(
+  participantId: string
+): Promise<{ status: 'reset' | 'already_absent' | 'not_found' }> {
+  const ref = doc(db, 'participants_public', participantId);
+  try {
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) {
+        return { status: 'not_found' as const };
+      }
+      const data = snap.data();
+      if (data.statut_entree !== true) {
+        return { status: 'already_absent' as const };
+      }
+      tx.update(ref, {
+        statut_entree: false,
+        date_entree: null,
+      });
+      return { status: 'reset' as const };
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `participants_public/${participantId}`);
+  }
+}
