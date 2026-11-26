@@ -72,7 +72,7 @@ export const PRIMARY_ADMIN_EMAIL = 'dalougouboris650@gmail.com';
 export const DEFAULT_EVENT_SETTINGS: EventSettings = {
   titre: 'INSCRIPTION AU PYJAMA PARTY',
   description:
-    'Réservez votre place dès maintenant en remplissant ce formulaire. Vous recevrez immédiatement votre numéro d’inscription et votre QR Code personnel pour l’accès à la soirée.',
+    'Réservez votre place dès maintenant en remplissant ce formulaire. Vous recevrez immédiatement votre numéro d’inscription personnel pour l’accès à la soirée.',
   affiche_present: false,
   affiche_fit: 'contain',
   affiche_position: 'center',

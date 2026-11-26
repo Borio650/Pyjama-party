@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, QrCode, ArrowDown } from 'lucide-react';
+import { LayoutDashboard, Ticket, ArrowDown } from 'lucide-react';
 
 interface NavbarProps {
   view: 'public' | 'dashboard';
@@ -68,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity whitespace-nowrap shrink-0 cursor-pointer font-semibold"
                 style={{ color: 'var(--brand-accent)' }}
               >
-                <QrCode className="w-3.5 h-3.5" aria-hidden="true" />
+                <Ticket className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Mon ticket</span>
               </button>
             )}

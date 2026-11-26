@@ -112,7 +112,7 @@ function PyjamaPartyApp() {
             Pyjama Party — Plateforme officielle d’inscription et de billetterie
           </p>
           <p>
-            Numéros de téléphone strictement confidentiels · QR Code personnel individuel
+            Numéros de téléphone strictement confidentiels · Inscription et suivi en temps réel
           </p>
         </div>
       </footer>

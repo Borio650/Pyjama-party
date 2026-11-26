@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { CheckCircle2, Download, Image as ImageIcon, X } from 'lucide-react';
+import { CheckCircle2, Download, X } from 'lucide-react';
 import type { ParticipantPublic } from '../types/pyjama';
-import { downloadQrPng, downloadTicketPdf } from '../lib/exportUtils';
+import { downloadTicketPdf } from '../lib/exportUtils';
 
 interface TicketModalProps {
   participant: ParticipantPublic | null;
@@ -16,7 +15,6 @@ export const TicketModal: React.FC<TicketModalProps> = ({
   onClose,
 }) => {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [downloadingPng, setDownloadingPng] = useState(false);
 
   if (!participant) return null;
 
@@ -26,15 +24,6 @@ export const TicketModal: React.FC<TicketModalProps> = ({
       await downloadTicketPdf(participant, eventTitle);
     } finally {
       setDownloadingPdf(false);
-    }
-  };
-
-  const handleDownloadPng = async () => {
-    setDownloadingPng(true);
-    try {
-      await downloadQrPng(participant);
-    } finally {
-      setDownloadingPng(false);
     }
   };
 
@@ -78,24 +67,13 @@ export const TicketModal: React.FC<TicketModalProps> = ({
               Numéro d’inscription
             </p>
             <p
-              className="font-mono-tabular text-xl font-bold mb-4"
+              className="font-mono-tabular text-2xl font-bold mb-4"
               style={{ color: 'var(--brand-primary)' }}
             >
               {participant.numero_inscription}
             </p>
 
-            <div className="inline-flex p-3 bg-white rounded-xl border border-slate-200 mb-4">
-              <QRCodeSVG
-                value={participant.qr_token}
-                size={168}
-                level="H"
-                includeMargin={false}
-                bgColor="#FFFFFF"
-                fgColor="#0F172A"
-              />
-            </div>
-
-            <div className="pt-4 border-t border-slate-200 text-left space-y-2 text-sm">
+            <div className="pt-4 border-t border-slate-200 text-left space-y-2.5 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">Participant</span>
                 <span className="font-semibold text-slate-900 text-right">
@@ -117,7 +95,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
             </div>
           </div>
 
-          <div className="mt-5 space-y-2.5">
+          <div className="mt-5">
             <button
               type="button"
               onClick={handleDownloadPdf}
@@ -133,22 +111,10 @@ export const TicketModal: React.FC<TicketModalProps> = ({
                 {downloadingPdf ? 'Génération du PDF...' : 'TÉLÉCHARGER MON TICKET'}
               </span>
             </button>
-
-            <button
-              type="button"
-              onClick={handleDownloadPng}
-              disabled={downloadingPng}
-              className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-            >
-              <ImageIcon className="w-4 h-4" aria-hidden="true" />
-              <span>
-                {downloadingPng ? 'Préparation...' : 'Sauvegarder le QR Code (PNG)'}
-              </span>
-            </button>
           </div>
 
           <p className="mt-4 text-xs text-center text-slate-500">
-            Ce QR Code contient uniquement un jeton sécurisé à usage unique pour l’entrée.
+            Présentez votre nom ou ce numéro d’inscription à l’entrée de l’événement.
           </p>
         </div>
       </div>

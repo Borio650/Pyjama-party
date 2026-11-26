@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { ChevronDown, Users } from 'lucide-react';
+import { ChevronDown, Ticket, Users } from 'lucide-react';
 import type { ParticipantPublic } from '../types/pyjama';
 
 interface ParticipantsGalleryProps {
@@ -85,15 +84,8 @@ export const ParticipantsGallery: React.FC<ParticipantsGalleryProps> = ({
                     </div>
                   </div>
 
-                  <div className="shrink-0 bg-white p-1.5 rounded-lg border border-slate-200">
-                    <QRCodeSVG
-                      value={p.qr_token}
-                      size={58}
-                      level="M"
-                      includeMargin={false}
-                      bgColor="#FFFFFF"
-                      fgColor="#0F172A"
-                    />
+                  <div className="shrink-0 w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 group-hover:text-slate-900 transition-colors">
+                    <Ticket className="w-4 h-4" aria-hidden="true" />
                   </div>
                 </article>
               ))}

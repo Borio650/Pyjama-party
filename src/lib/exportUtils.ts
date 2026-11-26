@@ -1,6 +1,3 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { QRCodeCanvas } from 'qrcode.react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -18,59 +15,10 @@ function formatDateFr(date: Date | null): string {
   }).format(date);
 }
 
-export async function renderQrToPngDataUrl(token: string, size = 320): Promise<string> {
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.left = '-9999px';
-  container.style.top = '-9999px';
-  container.style.visibility = 'hidden';
-  document.body.appendChild(container);
-
-  const root = createRoot(container);
-  root.render(
-    React.createElement(QRCodeCanvas, {
-      value: token,
-      size,
-      level: 'H',
-      includeMargin: true,
-      bgColor: '#FFFFFF',
-      fgColor: '#0F172A',
-    })
-  );
-
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
-
-  const canvas = container.querySelector('canvas');
-  const dataUrl = canvas ? canvas.toDataURL('image/png') : '';
-
-  root.unmount();
-  container.remove();
-
-  if (!dataUrl) {
-    throw new Error('Impossible de générer le QR Code.');
-  }
-  return dataUrl;
-}
-
-export async function downloadQrPng(participant: ParticipantPublic): Promise<void> {
-  const dataUrl = await renderQrToPngDataUrl(participant.qr_token, 512);
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = `qr-${participant.numero_inscription}-${participant.nom.toLowerCase()}.png`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-}
-
 export async function downloadTicketPdf(
   participant: ParticipantPublic,
   eventTitle: string
 ): Promise<void> {
-  const qrDataUrl = await renderQrToPngDataUrl(participant.qr_token, 400);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -91,29 +39,23 @@ export async function downloadTicketPdf(
   // Ticket card border
   doc.setDrawColor(226, 232, 240);
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(12, 42, pageWidth - 24, 146, 4, 4, 'FD');
+  doc.roundedRect(12, 44, pageWidth - 24, 118, 4, 4, 'FD');
 
   // Registration number
   doc.setTextColor(100, 116, 139);
-  doc.setFontSize(8.5);
-  doc.text("NUMÉRO D'INSCRIPTION", pageWidth / 2, 52, { align: 'center' });
+  doc.setFontSize(9);
+  doc.text("NUMÉRO D'INSCRIPTION", pageWidth / 2, 58, { align: 'center' });
 
   doc.setTextColor(30, 27, 75);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text(participant.numero_inscription, pageWidth / 2, 61, { align: 'center' });
+  doc.setFontSize(24);
+  doc.text(participant.numero_inscription, pageWidth / 2, 71, { align: 'center' });
 
-  // QR Code centered
-  const qrSize = 58;
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect((pageWidth - qrSize) / 2 - 2, 67, qrSize + 4, qrSize + 4, 3, 3, 'F');
-  doc.addImage(qrDataUrl, 'PNG', (pageWidth - qrSize) / 2, 69, qrSize, qrSize);
-
-  // Participant details
+  // Divider
   doc.setDrawColor(203, 213, 225);
-  doc.line(20, 135, pageWidth - 20, 135);
+  doc.line(20, 82, pageWidth - 20, 82);
 
-  const startY = 145;
+  const startY = 96;
   const labelX = 20;
   const valX = 58;
 
@@ -125,9 +67,9 @@ export async function downloadTicketPdf(
   ];
 
   rows.forEach(([label, val], idx) => {
-    const y = startY + idx * 9;
+    const y = startY + idx * 12;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
+    doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
     doc.text(label, labelX, y);
 
@@ -138,12 +80,12 @@ export async function downloadTicketPdf(
   });
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
   doc.text(
-    "Présentez ce QR Code à l'entrée. Ce ticket est personnel et utilisable une seule fois.",
+    "Présentez votre nom ou ce numéro d'inscription à l'entrée.",
     pageWidth / 2,
-    198,
+    176,
     { align: 'center' }
   );
 
@@ -170,47 +112,44 @@ export async function exportAllTicketsPdf(
     const row = Math.floor(slot / 2);
 
     const cardW = 88;
-    const cardH = 126;
+    const cardH = 110;
     const x = 14 + col * (cardW + 6);
-    const y = 16 + row * (cardH + 10);
+    const y = 18 + row * (cardH + 12);
 
     doc.setDrawColor(203, 213, 225);
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(x, y, cardW, cardH, 3, 3, 'FD');
 
     doc.setFillColor(30, 27, 75);
-    doc.rect(x, y, cardW, 18, 'F');
+    doc.rect(x, y, cardW, 20, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
-    doc.text(eventTitle.slice(0, 34), x + cardW / 2, y + 8, { align: 'center' });
-    doc.setFontSize(8);
-    doc.text(p.numero_inscription, x + cardW / 2, y + 14, { align: 'center' });
-
-    const qrUrl = await renderQrToPngDataUrl(p.qr_token, 260);
-    doc.addImage(qrUrl, 'PNG', x + (cardW - 44) / 2, y + 23, 44, 44);
+    doc.text(eventTitle.slice(0, 34), x + cardW / 2, y + 9, { align: 'center' });
+    doc.setFontSize(9);
+    doc.text(p.numero_inscription, x + cardW / 2, y + 15.5, { align: 'center' });
 
     doc.setTextColor(15, 23, 42);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(12);
     const fullName = `${p.nom.toUpperCase()} ${p.prenom}`;
-    doc.text(doc.splitTextToSize(fullName, cardW - 12)[0] || fullName, x + cardW / 2, y + 77, {
+    doc.text(doc.splitTextToSize(fullName, cardW - 12)[0] || fullName, x + cardW / 2, y + 40, {
       align: 'center',
     });
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
+    doc.setFontSize(9);
     doc.setTextColor(71, 85, 105);
-    doc.text(`Branche : ${p.branche_nom}`.slice(0, 42), x + 8, y + 90);
-    doc.text(`Service : ${p.service_nom}`.slice(0, 42), x + 8, y + 97);
+    doc.text(`Branche : ${p.branche_nom}`.slice(0, 42), x + 8, y + 58);
+    doc.text(`Service : ${p.service_nom}`.slice(0, 42), x + 8, y + 67);
     doc.text(
-      `Statut : ${p.statut_entree ? 'Déjà entré' : 'En attente'}`,
+      `Statut : ${p.statut_entree ? 'Présente' : 'Absente'}`,
       x + 8,
-      y + 104
+      y + 76
     );
-    doc.setFontSize(7);
+    doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
-    doc.text('Ticket personnel à usage unique', x + cardW / 2, y + 119, { align: 'center' });
+    doc.text('Ticket personnel', x + cardW / 2, y + 101, { align: 'center' });
   }
 
   doc.save(`tous-les-tickets-pyjama-party.pdf`);
@@ -363,7 +302,7 @@ export function exportPresenceExcel(participants: ParticipantPublic[]): void {
     Branche: p.branche_nom,
     Service: p.service_nom,
     "Date d'inscription": formatDateFr(p.created_at),
-    'Heure de scan': p.date_entree ? formatDateFr(p.date_entree) : '—',
+    "Heure d'arrivée": p.date_entree ? formatDateFr(p.date_entree) : '—',
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -395,7 +334,7 @@ export function exportPresenceCsv(participants: ParticipantPublic[]): void {
     'Branche',
     'Service',
     "Date d'inscription",
-    'Heure de scan',
+    "Heure d'arrivée",
   ];
 
   const escapeCsv = (val: string) => `"${val.replace(/"/g, '""')}"`;
@@ -462,7 +401,7 @@ export function exportPresencePdf(
       'Branche',
       'Service',
       "Date d'inscription",
-      'Heure de scan',
+      "Heure d'arrivée",
     ]],
     body: participants.map((p) => [
       p.statut_entree ? 'Présente' : 'Absente',

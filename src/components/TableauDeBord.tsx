@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -8,7 +7,6 @@ import {
   FileSpreadsheet,
   FileText,
   Loader2,
-  QrCode,
   Search,
   UserCheck,
   X,
@@ -41,7 +39,6 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBranch, setFilterBranch] = useState('all');
   const [filterPresence, setFilterPresence] = useState<'all' | 'presente' | 'absente'>('all');
-  const [qrInspect, setQrInspect] = useState<ParticipantPublic | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastMarkedName, setLastMarkedName] = useState<string | null>(null);
@@ -459,11 +456,11 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
                         <div className="inline-flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setQrInspect(p)}
-                            title="Voir le ticket"
+                            onClick={() => void downloadTicketPdf(p, eventTitle)}
+                            title="Télécharger le ticket PDF"
                             className="p-1.5 rounded-lg text-slate-600 hover:text-slate-950 hover:bg-slate-100 cursor-pointer"
                           >
-                            <QrCode className="w-4 h-4" />
+                            <Download className="w-4 h-4" />
                           </button>
                           {!p.statut_entree ? (
                             <button
@@ -494,42 +491,6 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Ticket Modal */}
-      {qrInspect && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-sm w-full p-6 text-center relative">
-            <button
-              type="button"
-              onClick={() => setQrInspect(null)}
-              className="absolute top-3 right-3 p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <p className="font-mono-tabular text-sm font-bold text-slate-900 mb-3">
-              {qrInspect.numero_inscription}
-            </p>
-            <div className="inline-flex p-3 bg-white border border-slate-200 rounded-xl mb-3">
-              <QRCodeSVG value={qrInspect.qr_token} size={180} level="H" />
-            </div>
-            <p className="font-display font-bold text-slate-900">
-              {qrInspect.nom.toUpperCase()} {qrInspect.prenom}
-            </p>
-            <p className="text-xs text-slate-600 mt-1 mb-4">
-              {qrInspect.branche_nom} · {qrInspect.service_nom}
-            </p>
-            <button
-              type="button"
-              onClick={() => void downloadTicketPdf(qrInspect, eventTitle)}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl text-white cursor-pointer"
-              style={{ backgroundColor: 'var(--brand-primary)' }}
-            >
-              <Download className="w-4 h-4" />
-              <span>Télécharger le ticket PDF</span>
-            </button>
-          </div>
-        </div>
-      )}
     </section>
   );
 };
